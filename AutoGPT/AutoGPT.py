@@ -155,7 +155,9 @@ Ensure the response can be parsed by Python json.loads\n"""
         openai.api_key = os.getenv("API_KEY")
         command = ""
         while command != "finish":
-            print(f">Generated prompt:\n{self.get_generated_prompt()}")
+            print(
+                f">Generated prompt:\n{self.get_generated_prompt()}Determine which next command to use, and respond using the "
+                "format specified above")
             messages = [{"role": "user",
                          "content": f"{self.get_system_setup_prompt()}{self.get_goals_prompt()}{self.get_constraints_prompt()}{self.get_commands_prompt()}{self.get_resources_prompt()}{self.get_perfeval_prompt()}{self.get_format_prompt()}{self.get_past_events_prompt()}"},
                         {"role": "user", "content": "Determine which next command to use, and respond using the "
@@ -164,6 +166,7 @@ Ensure the response can be parsed by Python json.loads\n"""
             res = completion.choices[0].message.content
             print(f">Assistant Reply: {res}")
             self.past_events.append(res)
+            # Using the preferred role context started generating weird results where it would start using not specified commands
             # messages.append({"role": "assistant", "content": res})
             res_json_dump = json.loads(res)
             command = res_json_dump["command"]["name"]
