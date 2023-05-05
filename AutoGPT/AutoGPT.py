@@ -150,8 +150,8 @@ Ensure the response can be parsed by Python json.loads\n"""
         return prompt
 
     def run(self) -> None:
-        openai.organization = "org-bWPRxgvD4e3jFTVqMKVBiGMp"
         load_dotenv()
+        openai.organization = os.getenv("ORG")
         openai.api_key = os.getenv("API_KEY")
         command = ""
         while command != "finish":
@@ -167,7 +167,7 @@ Ensure the response can be parsed by Python json.loads\n"""
             print(f">Assistant Reply: {res}")
             self.past_events.append(res)
             # Using the preferred role context started generating weird results where it would start using not specified commands
-            # Uncommented it as it seems perform as per expectations
+            # Uncommented it as it seems to perform as per expectations
             messages.append({"role": "assistant", "content": res})
             res_json_dump = json.loads(res)
             command = res_json_dump["command"]["name"]
