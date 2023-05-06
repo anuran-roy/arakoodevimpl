@@ -2,25 +2,29 @@ import os
 
 import numpy as np
 import openai
+import pinecone
 from dotenv import load_dotenv
-from sklearn.metrics.pairwise import cosine_similarity
 
 load_dotenv()
-openai.organization = os.getenv("ORG")
-openai.api_key = os.getenv("API_KEY")
 
-# Get gpt response on prompt and generate a vector embedding
-messages = [{"role": "user", "content": "how long does it take to remove wisdom tooth"}]
-completion = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=messages, temperature=0.9, n=5)
-responses = []
-response_embeddings = []
-for val in completion.choices:
-    res = val.message.content
-    responses.append(res)
-    response_embeddings.append(np.array(openai.Embedding.create(input=res, engine="text-embedding-ada-002")["data"]
-                                        [0]["embedding"]))
+query = "how long does it take to remove wisdom tooth"
+openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.organization = "org-bWPRxgvD4e3jFTVqMKVBiGMp"
 
-# sample documents rather than a database
+pinecone.init(api_key=os.getenv("PINECONE_API_KEY"), environment="northamerica-northeast1-gcp")
+index = pinecone.Index("hyde")
+
+
+result = openai.Completion.create(
+    engine="text-davinci-003",
+    prompt=query,
+    temperature=0.7,
+    n=8,
+    max_tokens=512,
+    top_p=1,
+    stop=['\n\n\n'],
+    logprobs=1
+)
 samples = [
     "However, if you do feel pain during the procedure, tell your dentist or oral surgeon so they can give you more anaesthetic. How long it takes to remove the tooth will vary. Simple procedures can take a few ""minutes, but it can take longer than 20 minutes if it's more complicated.",
     "Your surgery should take 45 minutes or less. You'll get one of these types of anesthesia so you don't feel pain during the removal: Local: Your doctor will numb your mouth with a shot of local anesthetic such as novocaine, lidocaine or mepivicaine.",
@@ -30,30 +34,40 @@ samples = [
     "How wisdom teeth are removed. Your dentist may remove your wisdom teeth or they may refer you to a specialist surgeon for hospital treatment. Before the procedure, you'll usually be given a local anaesthetic injection to numb the area around the tooth.he time it takes to remove the tooth will vary. Some procedures only take a few minutes, whereas others can take 20 minutes or longer. After your wisdom teeth have been removed, you may experience swelling and discomfort, both on the inside and outside of your mouth."
 ]
 
-# get document embeddings
-sample_embeddings = []
-for sample in samples:
-    sample_embeddings.append(np.array(openai.Embedding.create(input=sample, engine="text-embedding-ada-002")["data"]
-                                      [0]["embedding"]))
+#
+#
+# Inserted once and hence commented out
+#
+#
+# sample_vectors = []
+# for idx, sample in enumerate(samples):
+#     embedding = openai.Embedding.create(
+#         input=sample.strip(), model="text-embedding-ada-002"
+#     )["data"][0]["embedding"]
+#     sample_vectors.append((str(idx), embedding, {"content": sample}))
+# upsert_response = index.upsert(
+#     sample_vectors,
+# )
 
-# compare embeddings and choose the document with the highest similarity
-for idx, re in enumerate(response_embeddings):
-    cosine_similarities = []
-    print(f"{responses[idx]}:")
-    for se in sample_embeddings:
-        cosine_similarities.append(cosine_similarity(re.reshape(1, -1), se.reshape(1, -1)))
-    print(cosine_similarities)
-    print(samples[cosine_similarities.index(max(cosine_similarities))])
-    print()
+to_return = []
+for _, val in enumerate(result['choices']):
+    text = val['text']
+    logprob = sum(val['logprobs']['token_logprobs'])
+    to_return.append((text, logprob))
+texts = [r[0] for r in sorted(to_return, key=lambda tup: tup[1], reverse=True)]
 
-# Another interesting mapping is to eliminate already chosen document from the list
-for idx, re in enumerate(response_embeddings):
-    cosine_similarities = []
-    print(f">Prompt:\n{responses[idx]}:")
-    for se in sample_embeddings:
-        cosine_similarities.append(cosine_similarity(re.reshape(1, -1), se.reshape(1, -1)))
-    max_sample_idx = cosine_similarities.index(max(cosine_similarities))
-    print(f">Document:\n{samples[max_sample_idx]}")
-    del samples[max_sample_idx]
-    del sample_embeddings[max_sample_idx]
-    print()
+print(">Generated responses:")
+text_embeddings = []
+for idx, doc in enumerate(texts):
+    print(doc.strip())
+    embedding = openai.Embedding.create(
+        input=doc.strip(), model="text-embedding-ada-002"
+    )["data"][0]["embedding"]
+    text_embeddings.append(embedding)
+text_embeddings = np.array(text_embeddings)
+mean_embedding = np.mean(text_embeddings, axis=0)
+result_vector = mean_embedding.reshape((1, len(mean_embedding)))
+query_response = index.query(top_k=2, include_metadata=True, vector=result_vector[0].tolist())
+print(">Retrieved documents")
+for res in query_response.matches:
+    print(res['metadata']['content'])
