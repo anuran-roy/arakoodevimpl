@@ -106,13 +106,13 @@ class WriteFile(Tool):
                 "type": "string",
             },
         }
-        super().__init__("write_file", "Write file to disk", schema, self.write)
+        super().__init__("write_file", "Write file to disk one file at a time", schema, self.write)
 
     @staticmethod
     def write(args):
         filename = args["file_path"]
         text = args["text"]
-        with open(filename, "w") as f:
+        with open(filename, "a") as f:
             f.write(text)
         return f"File {filename} written to successfully"
 
