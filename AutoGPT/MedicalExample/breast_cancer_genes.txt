@@ -1,0 +1,8 @@
+Gene Name: breast cancer anti-estrogen resistance 4
+RefSeq genomic: NC_000016.10, NC_060940.1
+RefSeq rna: NR_024049.1, NR_024050.1, NR_131216.1, NR_131217.1, NR_131222.1
+Symbol: BCAR4
+Tax ID: 9606
+Type of gene: ncRNA
+Position: {'chr': '16', 'end': 11922702, 'start': 11913686, 'strand': -1}
+Summary of breast cancer anti-estrogen resistance 4: This gene produces a spliced long non-coding RNA (lncRNA) that has been implicated in breast cancer metastasis. It was originally identified in a screen for genes responsible for the development of resistance to anti-estrogens in breast cancer cells. It is thought that release of CCL21 enables this lncRNA to bind to the SNIP1 and PNUTS transcription factors, thereby activating a non-canonical GLI-dependent hedgehog signaling pathway that promotes cancer cell migration and invasion. A similar gene in cow expresses a protein in mature oocytes and preimplantation embryos. Alternatively spliced transcript variants have been identified. [provided by RefSeq, Apr 2015].

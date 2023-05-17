@@ -6,6 +6,7 @@ from datetime import datetime
 import faiss
 import numpy as np
 import openai
+import tiktoken
 from serpapi import GoogleSearch
 from dotenv import load_dotenv
 
@@ -165,7 +166,8 @@ class Agent:
         return 'Constraints:\n1. ~4000 word limit for short term memory. Your short term memory is short, ' \
                'so immediately save important information to files.\n2. If you are unsure how you previously did ' \
                'something or want to recall past events, thinking about similar events will help you remember.\n3. No ' \
-               'user assistance\n4. Exclusively use the commands listed in double quotes e.g. "command name"\n\n'
+               'user assistance\n4. Exclusively use the commands listed in double quotes e.g. "command name"\n5. ' \
+               'Write to file before researching.\n'
 
     @staticmethod
     def get_resources_prompt() -> str:
@@ -177,7 +179,8 @@ class Agent:
         return "Performance Evaluation:\n1. Continuously review and analyze your actions to ensure you are performing " \
                "to the best of your abilities.\n2. Constructively self-criticize your big-picture behavior " \
                "constantly.\n3. Reflect on past decisions and strategies to refine your approach.\n4. Every command " \
-               "has a cost, so be smart and efficient. Aim to complete tasks in the least number of steps.\n\n"
+               "has a cost, so be smart and efficient. Aim to complete tasks in the least number of steps.\n4.Do not " \
+               "repeat same tasks.\n"
 
     @staticmethod
     def get_format_prompt() -> str:
@@ -200,13 +203,18 @@ Response Format:
 } 
 Ensure the response can be parsed by Python json.loads\n"""
 
-    def get_past_events_prompt(self) -> str:
+    def get_past_events_prompt(self, tokens) -> str:
         date = datetime.now()
         date_prompt = f'The current time and date is {date.strftime("%a")} {date.strftime("%B")} {date.day} {date.time().replace(second=0, microsecond=0)} {date.year}\n'
+        enc = tiktoken.get_encoding("cl100k_base")
+        tokens += len(enc.encode(date_prompt))
         prompt = ""
         if len(self.past_events) > 0:
             for msg in self.past_events[::-1]:
                 retrieved_msg = self.memory.retrieve(msg)
+                tokens += len(enc.encode(retrieved_msg))
+                if tokens > 3500:
+                    break
                 prompt += retrieved_msg + ",\n"
         return f"{date_prompt}This reminds you of these events from your past:\n[{prompt}]"
 
@@ -223,7 +231,11 @@ Ensure the response can be parsed by Python json.loads\n"""
         return f"{prompt}\n"
 
     def get_generated_prompt(self) -> str:
-        prompt = f"{self.get_system_setup_prompt()}{self.get_goals_prompt()}{self.get_constraints_prompt()}{self.get_commands_prompt()}{self.get_resources_prompt()}{self.get_perfeval_prompt()}{self.get_format_prompt()}{self.get_past_events_prompt()}"
+        prompt = f"{self.get_system_setup_prompt()}{self.get_goals_prompt()}{self.get_constraints_prompt()}{self.get_commands_prompt()}{self.get_resources_prompt()}{self.get_perfeval_prompt()}{self.get_format_prompt()}"
+        enc = tiktoken.get_encoding("cl100k_base")
+        tokens = len(enc.encode(prompt))
+        prompt += self.get_past_events_prompt(tokens)
+
         return prompt
 
     def run(self):
@@ -231,20 +243,18 @@ Ensure the response can be parsed by Python json.loads\n"""
         openai.organization = "org-bWPRxgvD4e3jFTVqMKVBiGMp"
         openai.api_key = os.getenv("OPENAI_API_KEY")
         command = ""
-        last_tool_res = ""
-        while command != "finish":
+        iterator = 0
+        while command != "finish" and iterator < 10:
+            iterator += 1
             prompt = self.get_generated_prompt()
             human_prompt = "Determine which next command to use, and respond using format specified above"
             print(SystemMessage(
                 f">Generated prompt:\n{prompt}"))
             messages = [{"role": "system",
                          "content": prompt}]
-            if last_tool_res != "":
-                print(SystemMessage(last_tool_res))
-                messages.append({"role": "system", "content": last_tool_res})
             print(HumanMessage(human_prompt))
             messages.append({"role": "user", "content": human_prompt})
-            completion = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=messages, temperature=0)
+            completion = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=messages, temperature=0.7)
             reply = completion.choices[0].message.content
             self.past_events.append(reply)
             print(AsstMessage(f">Assistant Reply:\n{reply}"))
@@ -282,7 +292,8 @@ class Memory:
         return embeddings
 
 
-m = Memory()
+if __name__ == "__main__":
+    m = Memory()
 
-agent = Agent([Search(), WriteFile()], ["write a weather report on SF"], m)
-agent.run()
+    agent = Agent([Search(), WriteFile()], ["write a weather report on SF"], m)
+    agent.run()
