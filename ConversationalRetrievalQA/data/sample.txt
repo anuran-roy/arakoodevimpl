@@ -1,0 +1,76 @@
+There are many advanced techniques used in NLP, such as bag-of-words, bag-of-n-words, word2vec, etc, for representing the words in a vector format. This is required for developing advanced applications such as language models, text summarizers, etc. Doc2Vec is a similar technique of representing words in a vector form. This model comes with several benefits as compared to the popular Word2Vec model. In this article, we will discuss the Doc2Vec model with an easy way of implementing it using Gensim. The major points to be discussed in this article are listed below.
+Table of contents
+
+    What is the Doc2Vec model?
+    Brief about Gensim
+    Implementing Doc2Vec using Gensim
+
+Let’s start with understanding the Doc2Vec model.
+What is the Doc2Vec model?
+
+In the field of natural language processing, we find various techniques for representing text data as a vector for analysis like a bag of words and Word2Vec. These techniques are focused on representing documents as a fixed-length vector. We may find some of the disadvantages of representing text as a fixed-length vector like the models can lose the information about the semantic relationship between the words. For example, these models are not capable of representing the word as ‘powerful is closer to strength’.
+
+Doc2Vec is quite similar to Word2Vec models. In one of our articles, we can find information about Word2Vec models in detail. When summing up this article we can say word2vec models are methods for getting word embedding from the whole corpus. While Doc2Vec proposes a method for getting word embedding from paragraphs of the corpus. We can also consider these word vectors as paragraph vectors instead of vector representations of the whole corpus.
+
+While researching the Doc2Vec, in this paper we find that researchers have used unsupervised learning algorithms to learn continuous distributed vector representations. We can understand Doc2Vec modelling as a method that learns vector representation of text while vectorization is applied to the small pieces of text documents, anything from a phrase or sentence to a large document. This method can be utilized in predicting words in paragraphs. These models can work by concatenating the paragraph with several word vectors from a paragraph and predicting the word in a given context.
+
+Deep down, we can say learning from paragraph vectors is a taken idea from learning using the word vectors. Despite predicting the next word in the sentence using a word vector that is random factorization we can predict the next word using the paragraph vector where it can also have information about the semantic relationship and can be helpful in better results.
+
+In a paragraph vector-matrix we can find the following components:
+
+    Paragraph vector representation: it is a mapping of every paragraph to a unique vector.
+    Word vector representation: mapping of every word from a paragraph in a unique vector.
+
+The below diagram can be a representation of learning using a paragraph vector.
+Using paragraph id as a unique vector makes Doc2Vec different from word2Vec. We can consider this vector as another word that works as a memory for the procedure and using this memory algorithm remembers the current context of words and predicts what is missing according to the current context.
+
+Implementation of the Doc2Vec model can be performed using the Gensim library. In this article, we will look at the implementation of Doc2Vec but before this, it is necessary to know about the Gensim library because it can also help us in the implementation of other models.
+Brief about Gensim
+
+Gensim is an open-source python library for text processing. Mainly it works in the field of representing text documents as semantic vectors. The word Gensim stands for generating similar. Going deeper in the architecture we find for processing text this library uses unsupervised algorithms of machine learning. Using the algorithms of Gensim we can automate the process of finding the semantic structure of text data. It mainly examines the statistical co-occurrence pattern under the corpus of data. Since it is using unsupervised learning algorithms, most of the time we don’t require any human intervention. Using this library we can utilize the following things of modelling text data:
+
+    Practicality: Using this library we can utilize some of the algorithms that have been generated to solve real-world problems. This library is more focused on real-world problems than academic problems.
+    Performance: This library provides a highly optimized implementation of vector space algorithms that uses C, BLAS, and memory mapping.
+    Memory independence: Using this library we don’t need to train the whole corpus fully in RAM at one time. We can also process large, web-scale corpora using data streaming.
+
+This library supports all python versions that are in working conditions. We can install this library using the following line of codes:
+In this article, we are going to perform Doc2Vec modelling using the Gensim library. Let’s take a look at how we can implement the Doc2Vec model.
+Implementing Doc2Vec using Gensim
+
+As we have discussed in the above point we can easily implement the Doc2Vec model using the Gensim library. We have seen installation steps in the above and after installation, we are ready to use this library. Let’s start by importing the library.
+
+import Gensim
+import Gensim.downloader as api
+
+In the above, we have called the Gensim library and its downloader module API. Since with this library we also get some datasets for practice, we will use Gensim provided text 8 dataset.
+
+Let’s download the dataset using the below lines of codes:
+
+dataset = api.load("text8")
+data = [d for d in dataset]
+Now we are ready to use the dataset that we have downloaded. Let’s obtain data for training.
+
+def tagged_document(list_of_list_of_words):
+   for i, list_of_words in enumerate(list_of_list_of_words):
+      yield Gensim.models.doc2vec.TaggedDocument(list_of_words, [i])
+data_training = list(tagged_document(data))
+
+Let’s check our dataset:
+
+data_training [:1]
+
+Here we can see the first list of tagged words. This list can also be considered as our first paragraph vector. Now we are required to instantiate the Doc2Vec  model. We can do that using the below lines of codes:
+
+model = Gensim.models.doc2vec.Doc2Vec(vector_size=40, min_count=2, epochs=30)
+
+In the above instantiation, we have defined the vector of size 40 with a minimum count of 2 words with 30 epochs. Now we can convert the format of words using the following lines of codes:
+
+model.build_vocab(data_training)
+
+Let’s make an inference from the model in the numerical format.
+
+print(model.infer_vector(['violent', 'means', 'to', 'destroy', 'the','organization']))
+Here in the above output, we can see that we have checked what is the status of a different word in vector representation and we have got a list that means every word has a different strength of the semantic relationship in different paragraph vectors. This is how the Doc2Vec model works using the Gensim library and provides different measures of relationship to words according to the paragraph vectors. For this measurement, infer_vector uses the cosine similarity.
+Final words
+
+In this article, we have discussed the Doc2Vec model and Gensim library. Along with this introduction, we have seen how we can implement the Doc2Vec model in a very easy way using the Gensim library. Since this library is focused on real-world problems, I encourage users to use this library for their real-life projects.
