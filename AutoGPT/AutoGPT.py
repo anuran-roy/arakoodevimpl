@@ -244,8 +244,8 @@ Ensure the response can be parsed by Python json.loads\n"""
 
     def run(self):
         self.tools.append(Finish())
-        openai.organization = "org-XmRcC0OkF3kIbeM6NGmNyc2t"
-        openai.api_key = "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"
+        openai.organization = os.getenv("OPENAI_API_KEY")
+        openai.api_key = os.getenv("OPENAI_ORG")
         command = ""
         iterator = 0
         while command != "finish" and iterator < 10:
