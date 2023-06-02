@@ -4,18 +4,17 @@ import time
 import PyPDF2
 import gensim.models.doc2vec
 import numpy as np
+import faiss
 import openai
 import redis
 import nltk
 
-# noinspection PyUnresolvedReferences
 from redis.commands.search.field import TagField, VectorField
 from redis.commands.search.indexDefinition import IndexDefinition, IndexType
 from redis.commands.search.query import Query
 from dotenv import load_dotenv
 
 # nltk.download('punkt')
-
 
 load_dotenv()
 
@@ -186,12 +185,41 @@ class Sentence(Embedding):
         self.embed_into_db(page_content, embeddings, "sent")
 
 
+class Memory(Embedding):
+    index = faiss.IndexFlatL2(300)
+    docstore = {}
+    last_id = -1
+
+    def __int__(self):
+        super().__init__("", "")
+
+    def add_docs(self, doc):
+        embedding = self.embed(doc)
+        self.docstore[self.last_id + 1] = doc
+        self.index.add(embedding)
+        self.last_id += 1
+
+    def retrieve(self, query, k=1):
+        embedding = self.embed(query)
+        _, idx = self.index.search(embedding, k)
+        return self.docstore.get(idx[0][0])
+
+    # @staticmethod
+    # def embed(doc):
+    #     embeddings = openai.Embedding.create(input=doc.strip(), model="text-embedding-ada-002")["data"][0]["embedding"]
+    #     embeddings = np.array(embeddings, dtype=np.float32).reshape(1, -1)
+    #     return embeddings
+    def embed(self, doc):
+        return np.array(self.get_embedding(doc), dtype=np.float32).reshape((1, -1))
+
+
 class Agent:
-    def __init__(self, embedding: Embedding):
+    def __init__(self, embedding: Embedding, memory: Memory):
         self.embedding = embedding
+        self.memory = memory
 
     def run(self):
-        chat_history = []
+        past_events = []
         user_query = input("Query or 0 to exit\n")
         while user_query != "0":
             system_prompt = """
@@ -203,6 +231,11 @@ If you don't know the answer, just say that you don't know, don't try to make up
 Chat history:
 {chat_history}
                 """
+            chat_history = []
+            if len(past_events) > 0:
+                for msg in past_events[::-1]:
+                    retrieved_msg = self.memory.retrieve(msg)
+                    chat_history.append(retrieved_msg)
             user_prompt = f"Question: {user_query}\nHelpful Answer:"
             system_prompt = system_prompt.format(
                 context=self.embedding.query(user_query),
@@ -221,11 +254,13 @@ Chat history:
             completion = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=messages, temperature=0.7)
             reply = completion.choices[0].message.content
             print(reply)
-            chat_history.append(f"Question:{user_query}\nHelpful Answer:{reply}")
+            past_events.append(reply)
+            self.memory.add_docs(f"{user_prompt}\n{reply}")
             user_query = input("Query or 0 to exit\n")
 
 
 e = Sentence('data/sample.txt')
 # e = Char1000('data/sample.txt')
-agent = Agent(e)
+m = Memory("", "")
+agent = Agent(e, m)
 agent.run()
