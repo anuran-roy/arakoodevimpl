@@ -60,15 +60,14 @@ class Embedding:
         self.filename = filename
         self.query = query
 
-    @staticmethod
-    def _read(filename):
+    def _read(self):
         text = ""
-        name, ext = os.path.splitext(filename)
+        name, ext = os.path.splitext(self.filename)
         if ext == ".txt":
-            with open(filename) as f:
+            with open(self.filename) as f:
                 text = f.read()
         elif ext == ".pdf":
-            reader = PyPDF2.PdfReader(filename)
+            reader = PyPDF2.PdfReader(self.filename)
             num = reader.numPages
             for i in range(num):
                 text += reader.getPage(i).extractText()
@@ -129,7 +128,7 @@ class Char1000(Embedding):
         return page_content
 
     def chunk_1000_and_embed(self):
-        text = self._read(self.filename)
+        text = self._read()
         page_content = self.chunk_1000(text)
         embeddings = []
         for content in page_content:
@@ -173,7 +172,7 @@ class Sentence(Embedding):
         return tokenizer.tokenize(text)
 
     def chunk_sentences_and_embed(self):
-        text = self._read(self.filename)
+        text = self._read()
         page_content = self.chunk_sentences(text)
         self.embed_sentences_into_db(page_content)
 
