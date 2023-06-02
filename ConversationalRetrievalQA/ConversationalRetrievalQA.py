@@ -57,6 +57,7 @@ def create_index(vector_dimensions: int):
 
 class Embedding:
     def __init__(self, filename, query):
+        create_index(300)
         self.filename = filename
         self.query = query
 
@@ -110,7 +111,6 @@ class Embedding:
 class Char1000(Embedding):
     def __init__(self, filename):
         super().__init__(filename, self.knn_doc_query_db)
-        create_index(300)
         self.chunk_1000_and_embed()
 
     @staticmethod
@@ -184,32 +184,97 @@ class Sentence(Embedding):
         self.embed_into_db(page_content, embeddings, "sent")
 
 
-class Memory(Embedding):
-    index = faiss.IndexFlatL2(300)
-    docstore = {}
+# class Memory(Embedding):
+#     index = faiss.IndexFlatL2(300)
+#     docstore = {}
+#     last_id = -1
+#
+#     def __int__(self):
+#         super().__init__("", "")
+#
+#     def add_docs(self, doc):
+#         embedding = self.embed(doc)
+#         self.docstore[self.last_id + 1] = doc
+#         self.index.add(embedding)
+#         self.last_id += 1
+#
+#     def retrieve(self, query, k=1):
+#         embedding = self.embed(query)
+#         _, idx = self.index.search(embedding, k)
+#         return self.docstore.get(idx[0][0])
+#
+#     # @staticmethod
+#     # def embed(doc):
+#     #     embeddings = openai.Embedding.create(input=doc.strip(), model="text-embedding-ada-002")["data"][0]["embedding"]
+#     #     embeddings = np.array(embeddings, dtype=np.float32).reshape(1, -1)
+#     #     return embeddings
+#     def embed(self, doc):
+#         return np.array(self.get_embedding(doc), dtype=np.float32).reshape((1, -1))
+
+class Memory:
+    r = redis.Redis(
+        host='redis-12487.c264.ap-south-1-1.ec2.cloud.redislabs.com',
+        port=12487,
+        password=os.getenv("REDIS_PASSWORD"))
+
+    INDEX_NAME = "chat_history"  # Vector Index Name
+    DOC_PREFIX = "doc:"  # RediSearch Key Prefix for the Index
+
     last_id = -1
 
-    def __int__(self):
-        super().__init__("", "")
+    def create_index(self, vector_dimensions: int):
+        try:
+            self.r.ft(self.INDEX_NAME).dropindex(delete_documents=True)
+        except:
+            pass
+
+        # schema
+        schema = (
+            TagField("tag"),
+            VectorField("vector",  # Vector Field Name
+                        "FLAT", {  # Vector Index Type: FLAT or HNSW
+                            "TYPE": "FLOAT32",  # FLOAT32 or FLOAT64
+                            "DIM": vector_dimensions,  # Number of Vector Dimensions
+                            "DISTANCE_METRIC": "COSINE",  # Vector Search Distance Metric
+                        }
+                        ),
+        )
+
+        # index Definition
+        definition = IndexDefinition(prefix=[self.DOC_PREFIX], index_type=IndexType.HASH)
+
+        # create Index
+        self.r.ft(self.INDEX_NAME).create_index(fields=schema, definition=definition)
 
     def add_docs(self, doc):
-        embedding = self.embed(doc)
-        self.docstore[self.last_id + 1] = doc
-        self.index.add(embedding)
         self.last_id += 1
+        pipe = self.r.pipeline()
+        embedding = self.embed(doc)
+        # HSET
+        pipe.hset(f"doc:{self.last_id}", mapping={
+            "vector": embedding,
+            "content": doc,
+            "tag": 'chat_history'
+        })
+        pipe.execute()
 
-    def retrieve(self, query, k=1):
-        embedding = self.embed(query)
-        _, idx = self.index.search(embedding, k)
-        return self.docstore.get(idx[0][0])
+    def retrieve(self, query_term, k=1):
+        tag_query = "(@tag:{ chat_history })=>"
+        knn_query = f"[KNN {k} @vector $vec AS score]"
+        query = Query(tag_query + knn_query) \
+            .sort_by('score', asc=False) \
+            .return_fields('id', 'score', 'content') \
+            .dialect(2)
+        embedding = self.embed(query_term.strip())
+        query_params = {"vec": embedding}
+        ret = self.r.ft(self.INDEX_NAME).search(query, query_params).docs
+        return ret
 
-    # @staticmethod
-    # def embed(doc):
-    #     embeddings = openai.Embedding.create(input=doc.strip(), model="text-embedding-ada-002")["data"][0]["embedding"]
-    #     embeddings = np.array(embeddings, dtype=np.float32).reshape(1, -1)
-    #     return embeddings
-    def embed(self, doc):
-        return np.array(self.get_embedding(doc), dtype=np.float32).reshape((1, -1))
+    @staticmethod
+    def embed(doc):
+        embeddings = openai.Embedding.create(input=doc.strip(), model="text-embedding-ada-002")["data"][0]["embedding"]
+        embeddings = np.array(embeddings, dtype=np.float32).reshape(1, -1).tobytes()
+        return embeddings
 
 
 class Agent:
@@ -260,6 +325,7 @@ Chat history:
 
 e = Sentence('data/sample.txt')
 # e = Char1000('data/sample.txt')
-m = Memory("", "")
+m = Memory()
+m.create_index(1536)
 agent = Agent(e, m)
 agent.run()

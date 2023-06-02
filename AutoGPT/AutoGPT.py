@@ -8,6 +8,10 @@ import numpy as np
 import openai
 import tiktoken
 from serpapi import GoogleSearch
+import redis
+from redis.commands.search.field import TagField, VectorField
+from redis.commands.search.indexDefinition import IndexDefinition, IndexType
+from redis.commands.search.query import Query
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -211,7 +215,7 @@ Ensure the response can be parsed by Python json.loads\n"""
         prompt = ""
         if len(self.past_events) > 0:
             for msg in self.past_events[::-1]:
-                retrieved_msg = self.memory.retrieve(msg)
+                retrieved_msg = self.memory.retrieve(msg)[0].content
                 tokens += len(enc.encode(retrieved_msg))
                 if tokens > 3500:
                     break
@@ -240,8 +244,8 @@ Ensure the response can be parsed by Python json.loads\n"""
 
     def run(self):
         self.tools.append(Finish())
-        openai.organization = "org-bWPRxgvD4e3jFTVqMKVBiGMp"
-        openai.api_key = os.getenv("OPENAI_API_KEY")
+        openai.organization = "org-XmRcC0OkF3kIbeM6NGmNyc2t"
+        openai.api_key = "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"
         command = ""
         iterator = 0
         while command != "finish" and iterator < 10:
@@ -266,34 +270,78 @@ Ensure the response can be parsed by Python json.loads\n"""
                     if tool.name != "finish":
                         last_tool_res = f"Command {tool.name} returned: {tool.run(args)}"
                         self.memory.add_docs(f"{reply}\n{last_tool_res}")
-                        time.sleep(20)
 
 
 class Memory:
-    index = faiss.IndexFlatL2(1536)
-    docstore = {}
+    r = redis.Redis(
+        host='redis-12487.c264.ap-south-1-1.ec2.cloud.redislabs.com',
+        port=12487,
+        password=os.getenv("REDIS_PASSWORD"))
+
+    INDEX_NAME = "qa"  # Vector Index Name
+    DOC_PREFIX = "doc:"  # RediSearch Key Prefix for the Index
+
     last_id = -1
 
-    def add_docs(self, doc):
-        embedding = self.embed(doc)
-        self.docstore[self.last_id + 1] = doc
-        self.index.add(embedding)
-        self.last_id += 1
+    def create_index(self, vector_dimensions: int):
+        try:
+            self.r.ft(self.INDEX_NAME).dropindex(delete_documents=True)
+        except:
+            pass
 
-    def retrieve(self, query, k=1):
-        embedding = self.embed(query)
-        _, idx = self.index.search(embedding, k)
-        return self.docstore.get(idx[0][0])
+        # schema
+        schema = (
+            TagField("tag"),
+            VectorField("vector",  # Vector Field Name
+                        "FLAT", {  # Vector Index Type: FLAT or HNSW
+                            "TYPE": "FLOAT32",  # FLOAT32 or FLOAT64
+                            "DIM": vector_dimensions,  # Number of Vector Dimensions
+                            "DISTANCE_METRIC": "COSINE",  # Vector Search Distance Metric
+                        }
+                        ),
+        )
+
+        # index Definition
+        definition = IndexDefinition(prefix=[self.DOC_PREFIX], index_type=IndexType.HASH)
+
+        # create Index
+        self.r.ft(self.INDEX_NAME).create_index(fields=schema, definition=definition)
+
+    def add_docs(self, doc):
+        self.last_id += 1
+        pipe = self.r.pipeline()
+        embedding = self.embed(doc)
+        # HSET
+        pipe.hset(f"doc:{self.last_id}", mapping={
+            "vector": embedding,
+            "content": doc,
+            "tag": 'chat_history'
+        })
+        pipe.execute()
+
+    def retrieve(self, query_term, k=1):
+        tag_query = "(@tag:{ chat_history })=>"
+        knn_query = f"[KNN {k} @vector $vec AS score]"
+        query = Query(tag_query + knn_query) \
+            .sort_by('score', asc=False) \
+            .return_fields('id', 'score', 'content') \
+            .dialect(2)
+        embedding = self.embed(query_term.strip())
+        query_params = {"vec": embedding}
+        ret = self.r.ft(self.INDEX_NAME).search(query, query_params).docs
+        print(ret)
+        return ret
 
     @staticmethod
     def embed(doc):
         embeddings = openai.Embedding.create(input=doc.strip(), model="text-embedding-ada-002")["data"][0]["embedding"]
-        embeddings = np.array(embeddings, dtype=np.float32).reshape(1, -1)
+        embeddings = np.array(embeddings, dtype=np.float32).reshape(1, -1).tobytes()
         return embeddings
 
 
 if __name__ == "__main__":
     m = Memory()
+    m.create_index(1536)
 
     agent = Agent([Search(), WriteFile()], ["write a weather report on SF"], m)
     agent.run()
