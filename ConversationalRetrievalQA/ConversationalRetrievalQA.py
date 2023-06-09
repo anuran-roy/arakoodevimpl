@@ -55,11 +55,19 @@ def create_index(vector_dimensions: int):
     r.ft(INDEX_NAME).create_index(fields=schema, definition=definition)
 
 
+def query_openai_chat_completion(messages):
+    completion = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=messages, temperature=0.7)
+    reply = completion.choices[0].message.content
+    return reply
+
+
 class Embedding:
-    def __init__(self, filename, query):
+    def __init__(self, filename, query, generate_examples=False):
         create_index(300)
         self.filename = filename
         self.query = query
+        self.generate_examples = generate_examples
+        self.examples = []
 
     def _read(self):
         text = ""
@@ -107,29 +115,61 @@ class Embedding:
             .dialect(2)
         return query
 
-
-class Char1000(Embedding):
-    def __init__(self, filename):
-        super().__init__(filename, self.knn_doc_query_db)
-        self.chunk_1000_and_embed()
-
     @staticmethod
-    def chunk_1000(text):
+    def generate_qa_examples(page_content):
+        prompt = """
+You are a teacher coming up with questions to ask on a quiz. 
+Given the following document, please generate a question and answer based on that document.
+
+Example Format:
+<Begin Document>
+...
+<End Document>
+QUESTION: question here
+ANSWER: answer here
+
+These questions should be detailed and be based explicitly on information in the document. Begin!
+
+<Begin Document>
+{doc}
+<End Document>
+            """
+        examples = []
+        for doc in page_content[:5]:
+            messages = [{
+                "role": "user",
+                "content": prompt.format(doc=doc)
+            }]
+            reply = query_openai_chat_completion(messages)
+            examples.append(reply)
+
+        return examples
+
+
+class Character(Embedding):
+    def __init__(self, filename, char_count=1000, generate_examples=False):
+        super().__init__(filename, self.knn_doc_query_db, generate_examples)
+        self.char_count = char_count
+        self.chunk_and_embed()
+
+    def chunk(self, text):
         page_content = []
         idx = 0
         s = ""
         for ch in text:
             s += ch
             idx += 1
-            if idx >= 1000:
+            if idx >= self.char_count:
                 page_content.append(s)
                 s = ""
                 idx = 0
         return page_content
 
-    def chunk_1000_and_embed(self):
+    def chunk_and_embed(self):
         text = self._read()
-        page_content = self.chunk_1000(text)
+        page_content = self.chunk(text)
+        if self.generate_examples:
+            self.examples = self.generate_qa_examples(page_content)
         embeddings = []
         for content in page_content:
             embedding = self.get_embedding(content.strip())
@@ -145,8 +185,8 @@ class Char1000(Embedding):
 
 
 class Sentence(Embedding):
-    def __init__(self, filename):
-        super().__init__(filename, self.knn_sent_query_db)
+    def __init__(self, filename, generate_examples=False):
+        super().__init__(filename, self.knn_sent_query_db, generate_examples)
         self.chunk_sentences_and_embed()
 
     def knn_sent_query_db(self, query_term, k=5):
@@ -174,6 +214,7 @@ class Sentence(Embedding):
     def chunk_sentences_and_embed(self):
         text = self._read()
         page_content = self.chunk_sentences(text)
+        self.examples = self.generate_qa_examples(page_content)
         self.embed_sentences_into_db(page_content)
 
     def embed_sentences_into_db(self, page_content):
@@ -183,33 +224,6 @@ class Sentence(Embedding):
             embeddings.append(self.convert_embedding_to_structure(embedding))
         self.embed_into_db(page_content, embeddings, "sent")
 
-
-# class Memory(Embedding):
-#     index = faiss.IndexFlatL2(300)
-#     docstore = {}
-#     last_id = -1
-#
-#     def __int__(self):
-#         super().__init__("", "")
-#
-#     def add_docs(self, doc):
-#         embedding = self.embed(doc)
-#         self.docstore[self.last_id + 1] = doc
-#         self.index.add(embedding)
-#         self.last_id += 1
-#
-#     def retrieve(self, query, k=1):
-#         embedding = self.embed(query)
-#         _, idx = self.index.search(embedding, k)
-#         return self.docstore.get(idx[0][0])
-#
-#     # @staticmethod
-#     # def embed(doc):
-#     #     embeddings = openai.Embedding.create(input=doc.strip(), model="text-embedding-ada-002")["data"][0]["embedding"]
-#     #     embeddings = np.array(embeddings, dtype=np.float32).reshape(1, -1)
-#     #     return embeddings
-#     def embed(self, doc):
-#         return np.array(self.get_embedding(doc), dtype=np.float32).reshape((1, -1))
 
 class Memory:
     r = redis.Redis(
@@ -285,6 +299,7 @@ class Agent:
     def run(self):
         past_events = []
         user_query = input("Query or 0 to exit\n")
+        examples_prompt = "\n".join(self.embedding.examples)
         while user_query != "0":
             system_prompt = """
 Use the following pieces of context to answer the users question. 
@@ -298,11 +313,11 @@ Chat history:
             chat_history = []
             if len(past_events) > 0:
                 for msg in past_events[::-1]:
-                    retrieved_msg = self.memory.retrieve(msg)
+                    retrieved_msg = self.memory.retrieve(msg)[0].content
                     chat_history.append(retrieved_msg)
             user_prompt = f"Question: {user_query}\nHelpful Answer:"
-            system_prompt = system_prompt.format(
-                context=self.embedding.query(user_query),
+            system_prompt = "EXAMPLES\n" + examples_prompt + "\n" + system_prompt.format(
+                context=[ret.content for ret in self.embedding.query(user_query)],
                 chat_history=chat_history[::-1]
             )
             messages = [
@@ -315,16 +330,15 @@ Chat history:
             ]
             print(system_prompt)
             print(user_prompt)
-            completion = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=messages, temperature=0.7)
-            reply = completion.choices[0].message.content
+            reply = query_openai_chat_completion(messages)
             print(reply)
             past_events.append(reply)
             self.memory.add_docs(f"{user_prompt}\n{reply}")
             user_query = input("Query or 0 to exit\n")
 
 
-e = Sentence('data/sample.txt')
-# e = Char1000('data/sample.txt')
+# e = Sentence('data/sample.txt')
+e = Character('data/sample.txt', 1000, True)
 m = Memory()
 m.create_index(1536)
 agent = Agent(e, m)
