@@ -329,7 +329,6 @@ class Memory:
         embedding = self.embed(query_term.strip())
         query_params = {"vec": embedding}
         ret = self.r.ft(self.INDEX_NAME).search(query, query_params).docs
-        print(ret)
         return ret
 
     @staticmethod
