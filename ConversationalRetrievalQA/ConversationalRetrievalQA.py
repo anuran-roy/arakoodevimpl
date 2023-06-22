@@ -55,9 +55,10 @@ def create_index(vector_dimensions: int):
 
 def query_openai_chat_completion(messages, functions=None):
     if functions is None:
-        functions = []
-    completion = openai.ChatCompletion.create(model="gpt-3.5-turbo-0613", messages=messages, temperature=0.7,
-                                              functions=functions, function_call="auto")
+        completion = openai.ChatCompletion.create(model="gpt-3.5-turbo-0613", messages=messages, temperature=0.7)
+    else:
+        completion = openai.ChatCompletion.create(model="gpt-3.5-turbo-0613", messages=messages, temperature=0.7,
+                                                  functions=functions, function_call="auto")
     reply = completion.choices[0].message
     return reply
 
@@ -134,14 +135,14 @@ These questions should be detailed and be based explicitly on information in the
 <Begin Document>
 {doc}
 <End Document>
-            """
+        """
         examples = []
         for doc in page_content[:5]:
             messages = [{
                 "role": "user",
                 "content": prompt.format(doc=doc)
             }]
-            reply = query_openai_chat_completion(messages)
+            reply = query_openai_chat_completion(messages).content
             examples.append(reply)
 
         return examples
@@ -287,7 +288,8 @@ class Memory:
 
     @staticmethod
     def embed(doc):
-        embeddings = openai.Embedding.create(input=doc.strip(), model="text-embedding-ada-002")["data"][0]["embedding"]
+        embeddings = openai.Embedding.create(input=doc.strip(), model="text-embedding-ada-002")["data"][0][
+            "embedding"]
         embeddings = np.array(embeddings, dtype=np.float32).reshape(1, -1).tobytes()
         return embeddings
 
@@ -325,7 +327,7 @@ Now it's your turn. Below are several numbered sources of information:
 ----------------
 Chat history:
 {chat_history}
-                """
+            """
             chat_history = []
             if len(past_events) > 0:
                 for msg in past_events[::-1]:
@@ -356,7 +358,7 @@ Chat history:
             retrieval_prompt = """
 Use fetch_documents to fetch the relevant source docs for the given reply, if no documnets were used just reply saying so, do not make up document ids:
 {gpt_reply}
-            """
+        """
             retrieval_prompt = retrieval_prompt.format(gpt_reply=reply)
             print(retrieval_prompt)
             messages = [
@@ -381,7 +383,7 @@ Use fetch_documents to fetch the relevant source docs for the given reply, if no
 
 class FetchDocument:
     schema = {
-        "name": "fetch_dociuments",
+        "name": "fetch_documents",
         "description": "fetch relevant document content for list of document ids",
         "parameters": {
             "type": "object",
@@ -406,7 +408,7 @@ class FetchDocument:
 
 
 # e = Sentence('data/sample.txt')
-e = Character('data/sample.txt', 1000)
+e = Character('data/sample.txt', 1000, True)
 m = Memory()
 m.create_index(1536)
 agent = Agent(e, m)

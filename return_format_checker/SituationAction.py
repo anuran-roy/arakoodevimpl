@@ -1,6 +1,7 @@
 import openai
 import os
 import json
+from json import JSONDecodeError
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -104,13 +105,11 @@ What is the action you would like to take out of the following: ('call', 'raise'
 action_format = """
 Specify the amount associated with that action in the format:
 {
-    action: string
+    action: {
+        reason: string,
+        type: string
+    }
     amount: number
-}
-For example, if you want to raise by $100, you would respond: 
-{
-    "action": "raise",
-    "amount": 100
 }
 ONLY return values in this format (no other text is necessary)
 """

@@ -47,7 +47,10 @@ What is the action you would like to take out of the following: ('call', 'raise'
 
 schema = """
 {
-    action: string
+    action: {
+        reason: string,
+        type: string
+    }
     amount: number
 }
 """
