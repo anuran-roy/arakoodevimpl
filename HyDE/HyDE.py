@@ -89,8 +89,7 @@ def retrieve(query_vector, k=1):
         .dialect(2)
     vec = query_vector
     query_params = {"vec": vec}
-    ret = r.ft(INDEX_NAME).search(redis_query, query_params).docs
-    return ret
+    return r.ft(INDEX_NAME).search(redis_query, query_params).docs
 
 
 def embed(document):
@@ -116,7 +115,7 @@ for sample in samples:
 
 # logarithmic probability sorting
 to_return = []
-for _, val in enumerate(result['choices']):
+for val in result['choices']:
     text = val['text']
     logprob = sum(val['logprobs']['token_logprobs'])
     to_return.append((text, logprob))
@@ -124,7 +123,7 @@ texts = [r[0] for r in sorted(to_return, key=lambda tup: tup[1], reverse=True)]
 
 print(">Generated responses:")
 text_embeddings = []
-for idx, doc in enumerate(texts):
+for doc in texts:
     print(doc.strip())
     embedding = embed(doc.strip())
     text_embeddings.append(embedding)

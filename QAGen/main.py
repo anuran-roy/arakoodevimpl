@@ -14,8 +14,7 @@ def query_openai_chat_completion(messages, functions=None):
     else:
         completion = openai.ChatCompletion.create(model="gpt-3.5-turbo-0613", messages=messages, temperature=0.7,
                                                   functions=functions, function_call="auto")
-    reply = completion.choices[0].message
-    return reply
+    return completion.choices[0].message
 
 
 class Agent:
