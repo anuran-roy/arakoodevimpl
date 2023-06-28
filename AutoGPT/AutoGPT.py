@@ -71,30 +71,29 @@ class Search(Tool):
         })
         res = res.get_dict()
         if "answer_box" in res.keys() and "answer" in res["answer_box"].keys():
-            toret = res["answer_box"]["answer"]
+            return res["answer_box"]["answer"]
         elif "answer_box" in res.keys() and "snippet" in res["answer_box"].keys():
-            toret = res["answer_box"]["snippet"]
+            return res["answer_box"]["snippet"]
         elif (
                 "answer_box" in res.keys()
                 and "snippet_highlighted_words" in res["answer_box"].keys()
         ):
-            toret = res["answer_box"]["snippet_highlighted_words"][0]
+            return res["answer_box"]["snippet_highlighted_words"][0]
         elif (
                 "sports_results" in res.keys()
                 and "game_spotlight" in res["sports_results"].keys()
         ):
-            toret = res["sports_results"]["game_spotlight"]
+            return res["sports_results"]["game_spotlight"]
         elif (
                 "knowledge_graph" in res.keys()
                 and "description" in res["knowledge_graph"].keys()
         ):
-            toret = res["knowledge_graph"]["description"]
+            return res["knowledge_graph"]["description"]
         elif "snippet" in res["organic_results"][0].keys():
-            toret = res["organic_results"][0]["snippet"]
+            return res["organic_results"][0]["snippet"]
 
         else:
-            toret = "No good search result found"
-        return toret
+            return "No good search result found"
 
 
 class WriteFile(Tool):
@@ -323,13 +322,12 @@ class Memory:
         tag_query = "(@tag:{ chat_history })=>"
         knn_query = f"[KNN {k} @vector $vec AS score]"
         query = Query(tag_query + knn_query) \
-            .sort_by('score', asc=False) \
-            .return_fields('id', 'score', 'content') \
-            .dialect(2)
+                .sort_by('score', asc=False) \
+                .return_fields('id', 'score', 'content') \
+                .dialect(2)
         embedding = self.embed(query_term.strip())
         query_params = {"vec": embedding}
-        ret = self.r.ft(self.INDEX_NAME).search(query, query_params).docs
-        return ret
+        return self.r.ft(self.INDEX_NAME).search(query, query_params).docs
 
     @staticmethod
     def embed(doc):

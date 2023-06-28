@@ -77,21 +77,16 @@ ret = gene_info_list
                 output_summary += f"Position: {pos}\n"
             if summary:
                 output_summary += f"Summary of {name}: {summary}\n"
-            else:
-                if generif:
-                    for rif in generif[:10]:
-                        pubmed = rif.get("pubmed")
-                        text = rif.get("text")
+            elif generif:
+                for rif in generif[:10]:
+                    pubmed = rif.get("pubmed")
+                    if text := rif.get("text"):
+                        output_summary += text
 
-                        if text:
-                            output_summary += text
+                        if pubmed:
+                            citation_data += f" Pubmed ID: {pubmed}"
 
-                            if pubmed:
-                                citation_data += f" Pubmed ID: {pubmed}"
-
-            output_summary = output_summary.strip()
-
-            if output_summary:
+            if output_summary := output_summary.strip():
                 processed_result.append((output_summary, {"citation_data": citation_data}))
 
         return processed_result

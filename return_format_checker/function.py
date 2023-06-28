@@ -14,8 +14,7 @@ def query_openai_chat_completion(messages, functions=None):
         functions = []
     completion = openai.ChatCompletion.create(model="gpt-3.5-turbo-0613", messages=messages, temperature=0.7,
                                               functions=functions, function_call={"name": Reply().name})
-    reply = completion.choices[0].message
-    return reply
+    return completion.choices[0].message
 
 
 class Function:
@@ -61,7 +60,7 @@ class Agent:
         tools = [Reply()]
         functions = [tool.schema for tool in tools]
         query = input("Query: (0 to exit)")
-        sys_prompt = f"""
+        sys_prompt = """
 Only use function_call to reply to use. Do not use content.
             """
         while query != "0":
@@ -83,7 +82,7 @@ Only use function_call to reply to use. Do not use content.
                             tool_res = tool.run(json.loads(reply["function_call"]["arguments"]))
                             print(tool_res)
             except KeyError as e:
-                print("KeyError:" + str(e))
+                print(f"KeyError:{str(e)}")
             query = input("Query: (0 to exit)")
 
 

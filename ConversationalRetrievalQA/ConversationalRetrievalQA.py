@@ -59,8 +59,7 @@ def query_openai_chat_completion(messages, functions=None):
     else:
         completion = openai.ChatCompletion.create(model="gpt-3.5-turbo-0613", messages=messages, temperature=0.7,
                                                   functions=functions, function_call="auto")
-    reply = completion.choices[0].message
-    return reply
+    return completion.choices[0].message
 
 
 class Embedding:
@@ -111,11 +110,12 @@ class Embedding:
     def format_query(tag, k):
         tag_query = f"(@tag:{{ {tag} }})=>"
         knn_query = f"[KNN {k} @vector $vec AS score]"
-        query = Query(tag_query + knn_query) \
-            .sort_by('score', asc=False) \
-            .return_fields('id', 'score', 'content') \
+        return (
+            Query(tag_query + knn_query)
+            .sort_by('score', asc=False)
+            .return_fields('id', 'score', 'content')
             .dialect(2)
-        return query
+        )
 
     @staticmethod
     def generate_qa_examples(page_content):
@@ -182,8 +182,7 @@ class Character(Embedding):
         query = self.format_query("doc", k)
         embedding = self.convert_embedding_to_structure(self.get_embedding(query_term.strip()))
         query_params = {"vec": embedding}
-        ret = r.ft(INDEX_NAME).search(query, query_params).docs
-        return ret
+        return r.ft(INDEX_NAME).search(query, query_params).docs
 
 
 class Sentence(Embedding):
@@ -205,8 +204,7 @@ class Sentence(Embedding):
         query = self.format_query("sent", k)
         embedding = self.convert_embedding_to_structure(self.get_embedding(query_term.strip()))
         query_params = {"vec": embedding}
-        ret = r.ft(INDEX_NAME).search(query, query_params).docs
-        return ret
+        return r.ft(INDEX_NAME).search(query, query_params).docs
 
     @staticmethod
     def chunk_sentences(text):
@@ -278,13 +276,12 @@ class Memory:
         tag_query = "(@tag:{ chat_history })=>"
         knn_query = f"[KNN {k} @vector $vec AS score]"
         query = Query(tag_query + knn_query) \
-            .sort_by('score', asc=False) \
-            .return_fields('id', 'score', 'content') \
-            .dialect(2)
+                .sort_by('score', asc=False) \
+                .return_fields('id', 'score', 'content') \
+                .dialect(2)
         embedding = self.embed(query_term.strip())
         query_params = {"vec": embedding}
-        ret = self.r.ft(self.INDEX_NAME).search(query, query_params).docs
-        return ret
+        return self.r.ft(self.INDEX_NAME).search(query, query_params).docs
 
     @staticmethod
     def embed(doc):
@@ -329,7 +326,7 @@ Chat history:
 {chat_history}
             """
             chat_history = []
-            if len(past_events) > 0:
+            if past_events:
                 for msg in past_events[::-1]:
                     retrieved_msg = self.memory.retrieve(msg)[0].content
                     chat_history.append(retrieved_msg)
