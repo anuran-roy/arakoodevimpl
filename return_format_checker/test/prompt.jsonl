@@ -1,0 +1,2 @@
+{"schema": {"dependencies": {"type": "array", "items": {"type": "string"}}}, "query": "In a shallow wide bowl, whisk together the milk, cornstarch, ground flaxseeds, baking powder, and vanilla. Add butter to a pan over medium-high heat and melt. Whisk the batter again right before dipping bread, as the cornstarch will settle to the bottom of the bowl. List all items used"}
+{"schema":  {"city":  {"type":  "string"}, "country":  {"type":  "string"}}, "query":  "Where was Barack Obama born?"}

@@ -53,12 +53,12 @@ def create_index(vector_dimensions: int):
     r.ft(INDEX_NAME).create_index(fields=schema, definition=definition)
 
 
-def query_openai_chat_completion(messages, functions=None):
+def query_openai_chat_completion(messages, functions=None, function_call="auto"):
     if functions is None:
         completion = openai.ChatCompletion.create(model="gpt-3.5-turbo-0613", messages=messages, temperature=0.7)
     else:
         completion = openai.ChatCompletion.create(model="gpt-3.5-turbo-0613", messages=messages, temperature=0.7,
-                                                  functions=functions, function_call="auto")
+                                                  functions=functions, function_call=function_call)
     reply = completion.choices[0].message
     return reply
 
@@ -178,7 +178,7 @@ class Character(Embedding):
             embeddings.append(self.convert_embedding_to_structure(embedding))
         self.embed_into_db(page_content, embeddings, "doc")
 
-    def knn_doc_query_db(self, query_term, k=5):
+    def knn_doc_query_db(self, query_term, k=10):
         query = self.format_query("doc", k)
         embedding = self.convert_embedding_to_structure(self.get_embedding(query_term.strip()))
         query_params = {"vec": embedding}
@@ -331,7 +331,7 @@ Chat history:
             chat_history = []
             if len(past_events) > 0:
                 for msg in past_events[::-1]:
-                    retrieved_msg = self.memory.retrieve(msg)[0].content
+                    retrieved_msg = self.memory.retrieve(msg)[0].content[:100]
                     chat_history.append(retrieved_msg)
             user_prompt = f"Question: {user_query}\nHelpful Answer:"
             context = self.embedding.query(user_query)
@@ -349,35 +349,47 @@ Chat history:
             ]
             print(system_prompt)
             print(user_prompt)
-            tools = [FetchDocument()]
-            functions = [tool.schema for tool in tools]
-            reply = query_openai_chat_completion(messages, functions).content
+            reply = query_openai_chat_completion(messages).content
             print(reply)
             past_events.append(reply)
             self.memory.add_docs(f"{user_prompt}\n{reply}")
-            retrieval_prompt = """
-Use fetch_documents to fetch the relevant source docs for the given reply, if no documnets were used just reply saying so, do not make up document ids:
-{gpt_reply}
-        """
-            retrieval_prompt = retrieval_prompt.format(gpt_reply=reply)
-            print(retrieval_prompt)
-            messages = [
-                {
-                    "role": "system",
-                    "content": retrieval_prompt,
-
-                },
-                {
-                    "role": "user",
-                    "content": "Fetch relevant documents"
-                }
-            ]
-            reply = query_openai_chat_completion(messages, functions).function_call
-            print(reply)
-            for tool in tools:
-                if reply["name"] == tool.schema["name"]:
-                    tool.run(json.loads(reply["arguments"]))
-                    break
+#             tools = [FetchDocument()]
+#             functions = [tool.schema for tool in tools]
+#             retrieval_prompt = """
+# Use fetch_documents to fetch the relevant source docs for the given reply, if no documnets were used just reply saying so, do not make up document id.
+# Documents are cited as an example,
+# Query: When is water wet?\n
+# Answer: Water will be wet when the sky is red [5],
+# which occurs in the evening [1].\n
+# Reply:
+# {{
+#   "arguments": "{{\n  \"ids\": [5, 1]\n}}",
+#   "name": "fetch_documents"
+# }}
+# -----------------
+# Query: {query}
+# Answer: {gpt_reply}
+# Reply:
+#         """
+#             retrieval_prompt = retrieval_prompt.format(query=user_query, gpt_reply=reply)
+#             print(retrieval_prompt)
+#             messages = [
+#                 {
+#                     "role": "system",
+#                     "content": retrieval_prompt,
+#
+#                 },
+#                 {
+#                     "role": "user",
+#                     "content": "Fetch relevant documents"
+#                 }
+#             ]
+#             reply = query_openai_chat_completion(messages, functions, {"name": "fetch_documents"}).function_call
+#             print(reply)
+#             for tool in tools:
+#                 if reply["name"] == tool.schema["name"]:
+#                     tool.run(json.loads(reply["arguments"]))
+#                     break
             user_query = input("Query or 0 to exit\n")
 
 
@@ -407,9 +419,10 @@ class FetchDocument:
             print(r.ft(INDEX_NAME).get(id)[0][1])
 
 
-# e = Sentence('data/sample.txt')
-e = Character('data/sample.txt', 1000, True)
-m = Memory()
-m.create_index(1536)
-agent = Agent(e, m)
-agent.run()
+if __name__ == "__main__":
+    # e = Sentence('data/sample.txt')
+    e = Character('data/sample.txt', 800)
+    m = Memory()
+    m.create_index(1536)
+    agent = Agent(e, m)
+    agent.run()

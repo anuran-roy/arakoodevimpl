@@ -21,44 +21,20 @@ def query_openai_chat_completion(messages, functions=None, function_call="auto")
     return reply
 
 
-class Function:
-    def __init__(self, name, schema, run):
-        self.name = name
-        self.schema = schema
-        self.run = run
-
-
-class Reply(Function):
-    def __init__(self, format):
-        name = "reply_user"
-        schema = {
-            "name": name,
-            "description": "reply to user's query",
-            "parameters": {
-                "type": "object",
-                "properties":
-                    format
-            }
-        }
-        super().__init__(name, schema, self.print_reply)
-
-    @staticmethod
-    def print_reply(args):
-        return args
-
-
 class Agent:
-    def __init__(self, format, query):
-        self.format = format
+    def __init__(self, schema, query):
+        self.json_format = schema
         self.query = query
 
     def run(self):
-        tools = [Reply(self.format)]
-        functions = [tool.schema for tool in tools]
         sys_prompt = f"""
-Only use function_call to reply to use. Do not use content.
+Reply using the specified json format only 
+```json
+{self.json_format}
+```
             """
         user_prompt = f"{self.query}"
+        print(sys_prompt)
         print(user_prompt)
         messages = [
             {
@@ -68,19 +44,19 @@ Only use function_call to reply to use. Do not use content.
                 "role": "user", "content": user_prompt
             },
         ]
-        reply = query_openai_chat_completion(messages, functions, {"name": "reply_user"})
-        try:
-            if reply["function_call"]:
-                for tool in tools:
-                    if tool.name == reply["function_call"]["name"]:
-                        tool_res = tool.run(json.loads(reply["function_call"]["arguments"]))
-                        return tool_res
-        except KeyError as e:
-            print("KeyError:" + str(e))
+        reply = query_openai_chat_completion(messages)
+        return reply.content
 
 
 if __name__ == "__main__":
-    schema = {'dependencies': {'type': 'array', 'items': {'type': 'string'}}}
+    schema = {
+        "dependencies": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        }
+    }
     query = "In a shallow wide bowl, whisk together the milk, cornstarch, ground flaxseeds, baking powder, " \
             "and vanilla. Add butter to a pan over medium-high heat and melt. Whisk the batter again right before " \
             "dipping bread, as the cornstarch will settle to the bottom of the bowl. List all items used"
